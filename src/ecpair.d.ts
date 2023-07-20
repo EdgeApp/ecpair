@@ -1,6 +1,8 @@
 /// <reference types="node" />
+import { BaseConverter } from 'base-x';
 import { Network } from './networks';
 import * as networks from './networks';
+import * as wif from 'wif';
 export { networks };
 interface ECPairOptions {
     compressed?: boolean;
@@ -24,7 +26,7 @@ export interface ECPairInterface extends Signer {
     network: Network;
     lowR: boolean;
     privateKey?: Buffer;
-    toWIF(): string;
+    toWIF(bs58EncodeFn?: typeof wif.encode): string;
     tweak(t: Buffer): ECPairInterface;
     verify(hash: Buffer, signature: Buffer): boolean;
     verifySchnorr(hash: Buffer, signature: Buffer): boolean;
@@ -34,7 +36,7 @@ export interface ECPairAPI {
     isPoint(maybePoint: any): boolean;
     fromPrivateKey(buffer: Buffer, options?: ECPairOptions): ECPairInterface;
     fromPublicKey(buffer: Buffer, options?: ECPairOptions): ECPairInterface;
-    fromWIF(wifString: string, network?: Network | Network[]): ECPairInterface;
+    fromWIF(wifString: string, network?: Network | Network[], bs58DecodeFn?: BaseConverter['decode']): ECPairInterface;
     makeRandom(options?: ECPairOptions): ECPairInterface;
 }
 export interface TinySecp256k1Interface {

@@ -1,3 +1,6 @@
+import { BaseConverter } from 'base-x';
+import * as bs58check from 'bs58check';
+
 import { Network } from './networks';
 import * as networks from './networks';
 import * as types from './types';
@@ -41,7 +44,7 @@ export interface ECPairInterface extends Signer {
   network: Network;
   lowR: boolean;
   privateKey?: Buffer;
-  toWIF(): string;
+  toWIF(bs58EncodeFn?: typeof wif.encode): string;
   tweak(t: Buffer): ECPairInterface;
   verify(hash: Buffer, signature: Buffer): boolean;
   verifySchnorr(hash: Buffer, signature: Buffer): boolean;
@@ -52,7 +55,11 @@ export interface ECPairAPI {
   isPoint(maybePoint: any): boolean;
   fromPrivateKey(buffer: Buffer, options?: ECPairOptions): ECPairInterface;
   fromPublicKey(buffer: Buffer, options?: ECPairOptions): ECPairInterface;
-  fromWIF(wifString: string, network?: Network | Network[]): ECPairInterface;
+  fromWIF(
+    wifString: string,
+    network?: Network | Network[],
+    bs58DecodeFn?: BaseConverter['decode'],
+  ): ECPairInterface;
   makeRandom(options?: ECPairOptions): ECPairInterface;
 }
 
@@ -113,12 +120,63 @@ export function ECPairFactory(ecc: TinySecp256k1Interface): ECPairAPI {
     return new ECPair(undefined, buffer, options);
   }
 
+  function decodeUsingCustomFn(
+    wifString: string,
+    version: number,
+    bs58DecodeFunc: BaseConverter['decode'] = bs58check.decode,
+  ): wif.WIFReturn {
+    // long version bytes use blake hash for bs58 check encoding
+    const buffer: Buffer = Buffer.from(bs58DecodeFunc(wifString));
+
+    if (version < 256) {
+      if (buffer.length === 33) {
+        return {
+          version: buffer[0],
+          privateKey: buffer.slice(1, 33),
+          compressed: false,
+        };
+      }
+      // invalid length
+      if (buffer.length !== 34) throw new Error('Invalid WIF length');
+      // invalid compression flag
+      if (buffer[33] !== 0x01) throw new Error('Invalid compression flag');
+      return {
+        version: buffer[0],
+        privateKey: buffer.slice(1, 33),
+        compressed: true,
+      };
+    }
+
+    // extra case for two byte WIF versions
+    if (buffer.length === 34) {
+      return {
+        version: buffer.readUInt16LE(1),
+        privateKey: buffer.slice(2, 34),
+        compressed: false,
+      };
+    }
+    // invalid length
+    if (buffer.length !== 35) throw new Error('Invalid WIF length');
+    // invalid compression flag
+    if (buffer[34] !== 0x01) throw new Error('Invalid compression flag');
+    return {
+      version: buffer.readUInt16LE(1),
+      privateKey: buffer.slice(2, 34),
+      compressed: true,
+    };
+  }
+
   function fromWIF(
     wifString: string,
     network?: Network | Network[],
+    bs58DecodeFn?: BaseConverter['decode'],
   ): ECPairInterface {
-    const decoded = wif.decode(wifString);
-    const version = decoded.version;
+    const hasCustomDecodeFn =
+      !types.Array(network) && typeof network !== 'undefined';
+    const decoded = hasCustomDecodeFn
+      ? decodeUsingCustomFn(wifString, (network as Network).wif, bs58DecodeFn)
+      : wif.decode(wifString);
+    const version = hasCustomDecodeFn ? decoded.version : decoded.version;
 
     // list of networks?
     if (types.Array(network)) {
@@ -195,8 +253,11 @@ export function ECPairFactory(ecc: TinySecp256k1Interface): ECPairAPI {
       return this.__Q;
     }
 
-    toWIF(): string {
+    toWIF(bs58EncodeFn?: typeof wif.encode): string {
       if (!this.__D) throw new Error('Missing private key');
+      if (bs58EncodeFn != null) {
+        return bs58EncodeFn(this.network.wif, this.__D, this.compressed);
+      }
       return wif.encode(this.network.wif, this.__D, this.compressed);
     }
 

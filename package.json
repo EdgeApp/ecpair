@@ -47,6 +47,9 @@
     "src"
   ],
   "dependencies": {
+    "@types/bs58check": "^2.1.0",
+    "base-x": "^4.0.0",
+    "bs58check": "^3.0.1",
     "randombytes": "^2.1.0",
     "typeforce": "^1.18.0",
     "wif": "^2.0.6"
