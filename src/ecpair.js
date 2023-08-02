@@ -1,6 +1,7 @@
 'use strict';
 Object.defineProperty(exports, '__esModule', { value: true });
 exports.ECPairFactory = exports.networks = void 0;
+const bs58check = require('bs58check');
 const networks = require('./networks');
 exports.networks = networks;
 const types = require('./types');
@@ -32,9 +33,56 @@ function ECPairFactory(ecc) {
     types.typeforce(isOptions, options);
     return new ECPair(undefined, buffer, options);
   }
-  function fromWIF(wifString, network) {
-    const decoded = wif.decode(wifString);
-    const version = decoded.version;
+  function decodeUsingCustomFn(
+    wifString,
+    version,
+    bs58DecodeFunc = bs58check.decode,
+  ) {
+    // long version bytes use blake hash for bs58 check encoding
+    const buffer = Buffer.from(bs58DecodeFunc(wifString));
+    if (version < 256) {
+      if (buffer.length === 33) {
+        return {
+          version: buffer[0],
+          privateKey: buffer.slice(1, 33),
+          compressed: false,
+        };
+      }
+      // invalid length
+      if (buffer.length !== 34) throw new Error('Invalid WIF length');
+      // invalid compression flag
+      if (buffer[33] !== 0x01) throw new Error('Invalid compression flag');
+      return {
+        version: buffer[0],
+        privateKey: buffer.slice(1, 33),
+        compressed: true,
+      };
+    }
+    // extra case for two byte WIF versions
+    if (buffer.length === 34) {
+      return {
+        version: buffer.readUInt16LE(1),
+        privateKey: buffer.slice(2, 34),
+        compressed: false,
+      };
+    }
+    // invalid length
+    if (buffer.length !== 35) throw new Error('Invalid WIF length');
+    // invalid compression flag
+    if (buffer[34] !== 0x01) throw new Error('Invalid compression flag');
+    return {
+      version: buffer.readUInt16LE(1),
+      privateKey: buffer.slice(2, 34),
+      compressed: true,
+    };
+  }
+  function fromWIF(wifString, network, bs58DecodeFn) {
+    const hasCustomDecodeFn =
+      !types.Array(network) && typeof network !== 'undefined';
+    const decoded = hasCustomDecodeFn
+      ? decodeUsingCustomFn(wifString, network.wif, bs58DecodeFn)
+      : wif.decode(wifString);
+    const version = hasCustomDecodeFn ? decoded.version : decoded.version;
     // list of networks?
     if (types.Array(network)) {
       network = network
@@ -95,8 +143,11 @@ function ECPairFactory(ecc) {
       }
       return this.__Q;
     }
-    toWIF() {
+    toWIF(bs58EncodeFn) {
       if (!this.__D) throw new Error('Missing private key');
+      if (bs58EncodeFn != null) {
+        return bs58EncodeFn(this.network.wif, this.__D, this.compressed);
+      }
       return wif.encode(this.network.wif, this.__D, this.compressed);
     }
     tweak(t) {
