@@ -1,7 +1,7 @@
 {
-  "name": "ecpair",
-  "version": "2.1.0",
-  "description": "Client-side Bitcoin JavaScript library ECPair",
+  "name": "@edge.app/ecpair",
+  "version": "2.1.0-edge.1",
+  "description": "Client-side Bitcoin JavaScript library ECPair (Edge fork — adds custom base58 encode/decode for altcoins)",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
   "engines": {
@@ -81,5 +81,8 @@
     "tslint": "^6.1.3",
     "typescript": "^4.4.4"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }
